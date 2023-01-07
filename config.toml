@@ -4,9 +4,24 @@ title = 'Cosmic Horror'
 
 theme = 'fuji'
 enableEmoji = true
+enableRobotsTXT = true
 
 [params]
 showReadTime = true
+author = 'Cosmic Horror'
+sourceURL = 'https://github.com/LovecraftianHorror/cosmichorror'
+
+[markup]
+
+[markup.highlight]
+# Gets rid of the ugly background color for code blocks. What else it does? No
+# clue...
+codeFences = false
+
+[markup.tableOfContents]
+# Why yes I'm not a designer. Why do you ask?
+startLevel = 1
+endLevel = 3
 
 [menu]
 
@@ -15,6 +30,10 @@ name = "Home"
 url = "/"
 weight = 1
 
+[[menu.nav]]
+name = "About"
+url = "/about"
+weight = 2
 
 [[menu.link]]
 name = "GitHub"

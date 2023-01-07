@@ -1,0 +1,27 @@
+{
+  "db": "SQLite",
+  "91d0b4fde0de365910a14cddfd768a5ed0eb31fe64591f230409e88beda416a7": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Int64"
+        },
+        {
+          "name": "name",
+          "ordinal": 1,
+          "type_info": "Text"
+        }
+      ],
+      "nullable": [
+        false,
+        false
+      ],
+      "parameters": {
+        "Right": 1
+      }
+    },
+    "query": "SELECT id, name FROM User WHERE id = ?"
+  }
+}

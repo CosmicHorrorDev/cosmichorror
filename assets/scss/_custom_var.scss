@@ -1,0 +1,17 @@
+// Override variables with that file
+@import '_custom'; // Keep that for back-compatibility. This shouldn't be used anymore.
+
+$light-link-color: #6e86d0;
+$light-link-hover-color: #6f62ac;
+
+// Stealing the colors from my terminal
+body {
+  --term-red:     #e06c75;
+  --term-green:   #00de8b;
+  --term-yellow:  #dac736;
+  --term-blue:    #11a2e7;
+  --term-magenta: #df3ccd;
+  --term-cyan:    #0abdb2;
+  // Well bright black
+  --term-gray:    #848892
+}

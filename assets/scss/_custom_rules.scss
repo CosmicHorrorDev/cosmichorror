@@ -1,0 +1,127 @@
+// Override CSS rules with that file
+
+// Default header colors look like links. Make them not look like links
+.side-bar-item,
+.markdown-body {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    color: var(--text-primay);
+  }
+}
+
+// Make light theme links a bit darker
+body[data-theme='auto'] {
+  a {
+    color: #{$light-link-color};
+  }
+
+  a:hover {
+    color: #{$light-link-hover-color};
+  }
+}
+body[data-theme='light'] {
+  a {
+    color: #{$light-link-color};
+  }
+
+  a:hover {
+    color: #{$light-link-hover-color};
+  }
+}
+
+// Custom classes that I can use in raw HTML
+.term-red {
+  color: var(--term-red);
+}
+.term-green {
+  color: var(--term-green);
+}
+.term-yellow {
+  color: var(--term-yellow);
+}
+.term-blue {
+  color: var(--term-blue);
+}
+.term-magenta {
+  color: var(--term-magenta);
+}
+.term-cyan {
+  color: var(--term-cyan);
+}
+.term-gray {
+  color: var(--term-gray);
+}
+
+/// Switching up the syntax highlighting
+
+// Comments
+.token.comment {
+  color: var(--term-gray);
+}
+
+// Chars
+.token.char,
+// Enums / Structs
+.token.class-name,
+// Diff deleted
+.token.deleted {
+  color: var(--term-red);
+}
+
+// Attributes
+.token.attr-name,
+// Functions
+.token.function,
+// Lifetimes
+.token.symbol {
+  color: var(--term-blue);
+}
+
+// Diff inserted
+.token.inserted,
+// Proc-macros
+.token.property,
+// Strings
+.token.string {
+  color: var(--term-green);
+}
+
+// Constants
+.token.constant,
+// Modules
+.token.namespace,
+// Punctuation
+.token.punctuation {
+  color: var(--term-cyan);
+}
+
+// Booleans
+.token.boolean,
+// Keywords
+.token.keyword,
+// Numbers
+.token.number {
+  color: var(--term-magenta);
+}
+
+.token.symbol {
+  font-style: italic;
+}
+
+// XXX: unknown
+.token.attr-value,
+.token.atrule,
+.token.entity,
+.token.url,
+.token.builtin,
+.token.selector,
+.token.tag,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  color: #f00; // Radioactive red
+}

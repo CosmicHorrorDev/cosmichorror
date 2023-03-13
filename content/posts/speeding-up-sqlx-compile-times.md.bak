@@ -1,0 +1,859 @@
++++
+draft = true
+tags = ["rust", "oss", "deep-dive", "sqlx"]
+title = "SQLx Compile Times Woes"
+date = "2022-09-25T11:37:26-06:00"
+description = "Fast feedback, fast feedback! My kingdom for a fast feedback loop"
++++
+
+# Someone on the internet...
+
+> `sqlx` is really nice, but you definitely take a hit to compile times
+>
+> \- Random people on the internet
+
+It's something that really resonated with me after heavily using `sqlx` at my old
+job.
+Even with a Ryzen 3700, `cargo check` times climbed from 5 to 10 to **20 seconds**, and
+`cargo sqlx prepare`ing off a remote database was a good excuse to take a coffee
+break. There's got to be something we can do...
+
+<!--more-->
+
+Before we dive into all that I'd like to have a quick aside to cover some `sqlx`
+basics. Feel free to skip if you're already familiar with `sqlx`'s macros and
+offline builds.
+
+_Disclaimer: This whole post was done on `sqlx` v0.5-v0.6. Some parts are
+already inaccurate with v0.7, and I'm sure that trend will continue_
+
+## Primer: `sqlx` macros 101
+
+One of `sqlx`'s main selling points is that it can perform compile-time query
+checking against an actual database. That means that if you have some code like
+so
+
+```rust
+use sqlx::{Result, SqliteConnection};
+
+struct User {
+    id: i64,
+    name: String,
+}
+
+async fn get_user_by_id(db: &mut SqliteConnection, id: i64) -> Result<User> {
+    sqlx::query_as!(
+        User,
+        "SELECT id, name FROM User WHERE id = ?",
+        id,
+    )
+    .fetch_one(db)
+    .await
+}
+```
+
+and compile with `DATABASE_URL` set to your database URL. Then it will connect to the
+database at compile time to verify that both the query is valid, and that the Rust
+types match the database's returned types. If your query is invalid, or your
+database types don't match their Rust counterparts then you'll end up with a
+compile-time error like so
+
+```diff
+11c11
+<         "SELECT id, name FROM User WHERE id = ?",
+---
+>         "SELECT id, name FROM User WHERE id = ? AND NOT deleted",
+```
+
+{{< raw >}}
+<pre tabindex="0"><code><b><span class="term-green">$</span></b> <span class="term-red">DATABASE_URL</span>=<span class="term-yellow">'sqlite:blog.db'</span> <span class="term-green">cargo</span> check
+<b><span class="term-green">    Checking</span></b> sqlx_blog v0.1.0 (/.../sqlx_blog)
+<b><span class="term-red">error</span>: error returned from database: (code: 1) no such column: deleted</b>
+  <b><span class="term-blue">--> </span></b>src/lib.rs:9:5
+   <b><span class="term-blue">|</span></b>
+<b><span class="term-blue">9  | </span><span class="term-red">/ </span></b>    sqlx::query_as!(
+<b><span class="term-blue">10 | </span><span class="term-red">| </span></b>        User,
+<b><span class="term-blue">11 | </span><span class="term-red">| </span></b>        "SELECT id, name FROM User WHERE id = ? AND NOT deleted",
+<b><span class="term-blue">12 | </span><span class="term-red">| </span></b>        id,
+<b><span class="term-blue">13 | </span><span class="term-red">| </span></b>    )
+   <b><span class="term-blue">| </span><span class="term-red">|_____^</span></b>
+   <b><span class="term-blue">|</span></b>
+   <b><span class="term-blue">= </span>note</b>: this error originates in the macro ...
+
+<b><span class="term-red">error</span>:</b> could not compile `sqlx_blog` due to previous error
+</code></pre>
+{{< /raw >}}
+
+Woops. Forgot to add that column :)
+
+Of course, requiring a database connection every time you build can be a hassle
+(e.g. in CI), so `sqlx` also provides the option
+to do offline builds. You just add the `"offline"` feature to `sqlx`, and now you
+can prepare an `sqlx-data.json` file that describes all of your queries using
+`cargo-sqlx` from
+[`sqlx-cli`](https://crates.io/crates/sqlx-cli "Command-line utility for SQLx, the Rust SQL toolkit").
+
+{{< raw >}}
+<pre tabindex="0"><code><b><span class="term-green">$</span></b> <span class="term-red">DATABASE_URL</span>=<span class="term-yellow">'sqlite:blog.db'</span> <span class="term-green">cargo</span> sqlx prepare
+   <b><span class="term-green">Compiling</span></b> sqlx_blog v0.1.0 (/.../sqlx_blog)
+    <b><span class="term-green">Finished</span></b> dev [unoptimized + debuginfo] target(s) in 0.10s
+query data written to `sqlx-data.json` in the current directory; please ...
+
+<span class="term-green"><b>$</b> bat</span> --plain <u>sqlx-data.json</u>
+{
+  <span class="term-cyan">"db"</span>: <span class="term-yellow">"SQLite"</span>,
+  <span class="term-cyan"><i>"{query_hash}"</i></span>: {
+    <span class="term-cyan">"describe"</span>: {
+      <span class="term-blue">...</span> <span class="term-gray">// A lot of information on the query</span>
+    },
+    <span class="term-cyan">"query"</span>: <span class="term-yellow">"SELECT id, name FROM User WHERE id = ?"</span>
+  }
+  <span class="term-blue">...</span> <span class="term-gray">// More entries for all other queries</span>
+}
+</code></pre>
+{{< /raw >}}
+
+Now your project can build using the information in `sqlx-data.json` instead of
+needing to connect to a live database.
+
+Connecting to databases at compile time is the kind of proc-macro (ab)use that people
+usually bring up when talking about `sqlx`. It's equally beautiful and horrifying
+:smile:.
+
+## Peering through the looking glass
+
+You can probably guess from this blog post, ya know, _existing and all_ that `sqlx` ended up being
+the main culprit, but I really had no clue when I started this journey. All I
+knew was that my old job's 60k+ sloc mono-crate codebase was slowly spiraling into a very unhealthy dev-feedback
+loop, and I was wanting **out**.
+
+I was rooting through my usual toolbox of
+[`cargo check --timings`](https://doc.rust-lang.org/stable/cargo/reference/timings.html "Reporting build timings"),
+[`cargo-llvm-lines`](https://github.com/dtolnay/cargo-llvm-lines "Count lines of LLVM IR per generic function"),
+and
+[`summarize`](https://github.com/rust-lang/measureme/blob/master/summarize/README.md "A tool to produce a human readable summary of measureme profiling data")
+to get a better idea of what was blowing up the `cargo check` times.
+`cargo check --timings` showed that, unsurprisingly, it was the massive
+mono-crate taking up all the time. `cargo-llvm-lines` pointed to a tossup
+between large `sqlx` macros, `serde`'s
+{{< hl_inline rust >}}#[derive(Deserialize, Serialize)]{{< /hl_inline >}}s, and
+some large functions. Last, but _certainly not least_, `summarize` had something very
+interesting to note (edited for narrow screens).
+
+{{< raw >}}
+<pre tabindex="0"><code><span class="term-green"><b>$</b> cargo</span> +nightly rustc -- -Z self-profile
+
+<span class="term-green"><b>$</b> summarize</span> summarize <u><i>{redacted}</i>-<i>{pid}</i>.mm_profdata</u>
++--------------------------+-----------+-----------------+----------+
+| Item                     | Self time | % of total time | Time     |
++--------------------------+-----------+-----------------+----------+
+| expand_crate             | 14.75s    | 67.516          | 14.83s   |
++--------------------------+-----------+-----------------+----------+
+| monomorphization_coll... | 1.11s     | 5.074           | 2.55s    |
++--------------------------+-----------+-----------------+----------+
+| hir_lowering             | 419.93ms  | 1.923           | 419.93ms |
++--------------------------+-----------+-----------------+----------+
+<span class="term-gray"><i>... many many elided rows</i></span>
+</code></pre>
+{{< /raw >}}
+
+**67.5% of the time was taken up by `expand_crate`!** What even is `expand_crate`?
+Well lucky for all of us living in the future this appears to now get reported
+in the much more appropriate item: `expand_proc_macro`, which makes things pretty obvious (probably
+thanks to
+[this PR](https://github.com/rust-lang/rust/pull/95739 "self-profiler: record spans for proc-macro expansions")).
+That's okay though, a quick `rg` on the compiler source at the time suggested
+the same thing.
+
+Well that seems to point a _reeeally_ big spotlight on `sqlx`, but what was
+it doing that was taking up so much time? And then my eyes fell on that ~500 KiB
+`sqlx-data.json` file...
+
+_500 KiB isn't that big_
+
+_It could be getting handled really poorly?_
+
+_The JSON is pretty printed. Maybe if we compact it..._
+
+{{< raw >}}<pre tabindex="0"><code>{{<
+in_pre_hyperfine
+    warmup=1 prepare="touch src/lib.rs" cmd="cargo check"
+    mean=19.273 stddev=" 0.202" user=18.977 sys=0.542
+    min=18.839 max=19.524
+>}}
+
+<span class="term-green"><b>$</b> mv</span> <u>sqlx-data.json</u> sqlx-data.json.pretty
+
+<span class="term-green"><b>$</b> cat</span> <u>sqlx-data.json.pretty</u> | <span class="term-green">jq</span> -c > sqlx-data.json
+
+{{<
+in_pre_hyperfine
+    warmup=1 prepare="touch src/lib.rs" cmd="cargo check"
+    mean=14.965 stddev=" 0.294" user=14.685 sys=0.531
+    min=14.449 max=15.368
+>}}</code></pre>
+{{< /raw >}}
+
+_(Note: All timings are run on a laptop with an i5-1135G7 because I wiped my
+desktop after it was having GPU issues :c)_
+
+Several. Seconds. Faster.
+
+That's a huge difference, but now that leaves the question of _why_ the JSON parsing is so slow. Even if `sqlx` was doing something really
+bad like re-reading the whole file for each macro then there are still only a couple
+hundred queries. **497 KiB * 203 queries** comes out to **98.5 MiB** which should be
+nothing for an optimized JSON par- :facepalm:. Wait... this is a debug build... it won't be an optimized JSON parser.
+
+# Down the rabbit hole
+
+Now that we found the culprit we can try to fix things. `cargo` makes
+it easy enough to change how we build dependencies. Why not set it to do an
+optimized build for all proc-macro related bits? That should speed things up a
+lot.
+
+Consulting
+[the docs](https://doc.rust-lang.org/cargo/reference/profiles.html#build-dependencies "Cargo Reference: build dependencies")
+we see that we can do an optimized build for all proc-macros and their dependencies by adding
+
+```toml
+[profile.dev.build-override]
+opt-level = 3
+```
+
+to our `Cargo.toml` file.
+
+We're back to our pretty-printed `sqlx-data.json` now. How are we looking?
+
+{{<
+hyperfine
+    warmup=1 prepare="touch src/lib.rs" cmd="cargo check"
+    mean=" 7.021" stddev=" 0.077" user=6.696 sys=0.539
+    min=" 6.887" max=" 7.176"
+>}}
+
+**12 seconds faster?** One word: _**dopamine**._
+
+On top of that one of my coworkers pointed out that we get most of the benefit
+still when
+doing an optimized build of just `sqlx-macros` a la
+
+```toml
+[profile.dev.package.sqlx-macros]
+opt-level = 3
+```
+
+## Pulchritudinous parsing
+
+_Bless you_
+
+_Oh, I didn't sneeze. It actually means beautiful_
+
+_Huh. Pretty ugly looking word for beautiful_
+
+So we're done, right? Ship it, and all that? **No.** We may have put a nice band-aid
+on things, but I'm not going to call it good here. Let's fixup `sqlx`, so
+that everyone can benefit from faster builds. Poking around the source for a bit
+we find {{< hl_inline rust >}}DynQueryData::from_data_file(){{< /hl_inline >}} (edited for brevity).
+
+```rust
+// from sqlx-macros/src/query/data.rs
+
+#[derive(serde::Deserialize)]
+pub struct DynQueryData {
+    #[serde(skip)]
+    pub db_name: String,
+    pub query: String,
+    pub describe: serde_json::Value,
+    #[serde(skip)]
+    pub hash: String,
+}
+
+impl DynQueryData {
+    /// Find and deserialize the data table for this query from a shared
+    /// `sqlx-data.json` file. The expected structure is a JSON map keyed by
+    /// the SHA-256 hash of queries in hex.
+    pub fn from_data_file(path: &Path, query: &str) -> crate::Result<Self> {
+        let this = serde_json::Deserializer::from_reader(BufReader::new(
+            File::open(path).map_err(...)?
+        ))
+        .deserialize_map(DataFileVisitor {
+            query,
+            hash: hash_string(query),
+        })?;
+
+        // ...
+
+        Ok(this)
+    }
+}
+
+// lazily deserializes only the `QueryData` for the query we're looking for
+struct DataFileVisitor<'a> {
+    query: &'a str,
+    hash: String,
+}
+
+impl<'de> Visitor<'de> for DataFileVisitor<'_> {
+    type Value = DynQueryData;
+
+    fn expecting(...) -> fmt::Result { ... }
+
+    fn visit_map<A>(
+        self,
+        mut map: A
+    ) -> Result<Self::Value, <A as MapAccess<'de>>::Error>
+    where
+        A: MapAccess<'de>,
+    {
+        let mut db_name: Option<String> = None;
+
+        let query_data = loop {
+            // -- 8< -- Get db name and query info then break -- 8< --
+        };
+
+        // Serde expects us to consume the whole map; fortunately they've got a
+        // convenient type to let us do just that
+        while let Some(_) = map.next_entry::<IgnoredAny, IgnoredAny>()? {}
+
+        Ok(query_data)
+    }
+}
+```
+
+It's a decent chunk of code, but we can see that they do, in fact, deserialize the
+whole file for each query. They're smart about it and tell `serde` to ignore most
+of the values,
+but `serde_json` still has to parse the full thing to ensure it's valid JSON.
+
+That leaves an easy fix though. The `sqlx-data.json` file shouldn't change while
+we're compiling, so we can just deserialize the whole thing once upfront and
+then pass out the data for each query as needed. Something like
+
+```rust
+static OFFLINE_DATA_CACHE: Lazy<Mutex<BTreeMap<PathBuf, OfflineData>>> =
+    Lazy::default();
+
+#[derive(serde::Deserialize)]
+struct BaseQuery {
+    query: String,
+    describe: serde_json::Value,
+}
+
+#[derive(serde::Deserialize)]
+struct OfflineData {
+    db: String,
+    #[serde(flatten)]
+    hash_to_query: BTreeMap<String, BaseQuery>,
+}
+
+impl OfflineData {
+    fn get_query_from_hash(&self, hash: &str) -> Option<DynQueryData> {
+        self.hash_to_query.get(hash).map(|base_query| DynQueryData {
+            db_name: self.db.clone(),
+            query: base_query.query.to_owned(),
+            describe: base_query.describe.to_owned(),
+            hash: hash.to_owned(),
+        })
+    }
+}
+
+#[derive(serde::Deserialize)]
+pub struct DynQueryData { ... }
+
+impl DynQueryData {
+    pub fn from_data_file(path: &Path, query: &str) -> crate::Result<Self> {
+        let query_data = {
+            let mut cache = OFFLINE_DATA_CACHE
+                .lock()
+                .unwrap_or_else(/* reset the cache */);
+
+            if !cache.contains_key(path) {
+                let offline_data_contents = fs::read_to_string(path)
+                    .map_err(...)?;
+                let offline_data: OfflineData =
+                    serde_json::from_str(&offline_data_contents)?;
+                let _ = cache.insert(path.to_owned(), offline_data);
+            }
+
+            let offline_data = cache
+                .get(path)
+                .expect("Missing data should have just been added");
+
+            let query_data = offline_data
+                .get_query_from_hash(&hash_string(query);
+                .ok_or_else(...)?;
+
+            if query != query_data.query {
+                return Err(/* hash collision error */);
+            }
+
+            query_data
+        };
+
+        // ...
+
+        Ok(query_data)
+    }
+}
+```
+
+As you can see we deserialize all the `sqlx-data.json` data into an
+{{< hl_inline rust >}}OFFLINE_DATA_CACHE{{< /hl_inline >}} which stores it in a
+{{< hl_inline rust >}}BTreeMap<PathBuf, OfflineData>{{< /hl_inline >}}
+ (A {{< hl_inline rust >}}BTreeMap{{< /hl_inline >}} is needed because there can actually be multiple `sqlx-data.json`
+files in use, so the path maps to its deserialized data). From there we can just
+build and return {{< hl_inline rust >}}DynQueryData{{< /hl_inline >}}s from {{< hl_inline rust >}}OfflineData{{< /hl_inline >}} on the fly. Not too bad, and we get to scrap
+all the custom deserializer logic as a bonus.
+
+_PR: [launchbadge/sqlx#1684](https://github.com/launchbadge/sqlx/pull/1684
+"refactor: Keep parsed sqlx-data.json in a cache instead of reparsing")_
+
+
+How's the time looking now?
+
+_(Note: Still keeping the `build-override` from before)_
+
+{{<
+hyperfine
+    warmup=1 prepare="touch src/lib.rs" cmd="cargo check"
+    mean=" 5.614" stddev=" 0.064" user=5.349 sys=0.501
+    min=" 5.489" max=" 5.739"
+>}}
+
+Over a full second shaved off from the ~7 seconds before!
+
+## And you get a cache, and you get a cache
+
+That covers the check times mentioned in the opening quote. What else was there?
+Something about coffee?
+
+> `cargo sqlx prepare`ing off a remote database was a good excuse to take a
+> coffee break.
+
+Oh yeah, preparing off remote databases! (Also I don't really drink coffee, but
+I do have a dog to walk :) )
+
+Diving back into the code yields us this snippet for preparing off a remote
+database.
+
+```rust
+// from sqlx-macros/src/query/mod.rs
+
+fn expand_from_db(
+    input: QueryMacroInput,
+    db_url: &str
+) -> crate::Result<TokenStream> {
+    let db_url = Url::parse(db_url)?;
+    match db_url.scheme() {
+        #[cfg(feature = "postgres")]
+        "postgres" | "postgresql" => {
+            let data = block_on(async {
+                let mut conn = sqlx_core::postgres::PgConnection::connect(
+                    db_url.as_str()
+                ).await?;
+                QueryData::from_db(&mut conn, &input.sql).await
+            })?;
+
+            expand_with_data(input, data, false)
+        },
+
+        #[cfg(not(feature = "postgres"))]
+        "postgres" | "postgresql" => Err(
+            "database URL has the scheme of a PostgreSQL database but the \
+            `postgres` feature is not enabled".into()
+        ),
+
+        // -- 8< -- Same thing for other dbs. Soooo many `cfg`s -- 8< --
+
+        item => Err(format!("Missing expansion needed for: {:?}", item).into())
+    }
+}
+```
+
+Very similar to the last section, but this time we're creating a fresh database connection for
+each query macro instead of parsing a file. This is not cheap for remote databases! Quoting
+[`sqlx`'s docs](https://docs.rs/sqlx/0.6.2/sqlx/pool/struct.Pool.html#1-overhead-of-opening-a-connection
+"1. Overhead of Opening a Connection")
+
+> **1. Overhead of Opening a Connection**
+>
+> Opening a database connection is not exactly a cheap operation.
+> 
+> For SQLite, it means numerous requests to the filesystem and memory
+> allocations, while for server-based databases it involves performing DNS
+> resolution, opening a new TCP connection and allocating buffers.
+> 
+> Each connection involves a nontrivial allocation of resources for the database
+> server, usually including spawning a new thread or process specifically to
+> handle the connection, both for concurrency and isolation of faults.
+> 
+> Additionally, database connections typically involve a complex handshake
+> including authentication, negotiation regarding connection parameters (default
+> character sets, timezones, locales, supported features) and upgrades to
+> encrypted tunnels.
+
+Couldn't have put it better myself! The fix is largely the same as last time.
+Instead of opening a new connection for each query we cache a single connection
+that gets reused. I'll spare you the code since it's the
+same idea, so let's jump straight to the numbers instead (Taking them from the PR description
+since it'd be a pain to reproduce now).
+
+_PR: [launchbadge/sqlx#1782](https://github.com/launchbadge/sqlx/pull/1782
+"Reuse a cached DB connection instead of always recreating for sqlx-macros")
+which caused an
+[issue with SQLite](https://github.com/launchbadge/sqlx/issues/1929
+'0.6.0: query macro fails on sqlite with "error returned from database: database is locked"'),
+so it was
+[excluded from the caching logic](https://github.com/launchbadge/sqlx/pull/1930
+"Don't cache sqlite connections for macros")_
+
+**\# of queries:** 332
+
+**`sqlx-data.json` size:** 705 KiB
+
+| Setup | `main` (f858138) | This PR | % Change |
+| :---: | :---: | :---: | :---:
+| MariaDB remote | 61.421 s ±  1.985 s | 12.694 s ±  0.153 s | -79% |
+| MariaDb local | 5.291 s ±  0.086 s | 5.050 s ±  0.064 s |  -5% |
+
+That's almost a -80% change when preparing off a remote MariaDB instance! On top
+of that the
+original ~1 minute is actually after two non-`sqlx` changes to my old work's
+mono-crate that drastically reduced the time. It used to be ~8 minutes before
+we:
+
+1. Removed an unused `ormx`-based helper crate that seemed to add **_a lot_**
+more queries
+2. Split the main mono-crate into several crates in a workspace
+
+Well... the second one helped a lot
+{{< raw >}}<sub>{{< /raw >}}
+if you ignore the full rebuild
+{{< raw >}}</sub>{{< /raw >}}
+
+_I'm sorry. Wait. What was that last bit?_
+
+## Am I okay? No. Will I be okay? If it doesn't rebuild. Hotel? Trivago
+
+The moment I was crushed by this is actually immortalized in my old job's slack
+history
+
+_Slack logs (paraphrased)_
+
+> **coworker:**: We may need to do something about workspace-level
+> `sqlx-data.json` because it prevents building the whole workspace at once 
+>
+> **coworker:** Actually `cargo sqlx prepare --merged` builds the whole
+> workspace, but rebuilds all dependencies every time
+>
+> **me:** Hmmm, it looks like `cargo` can't find the build fingerprints.
+> Hopefully that's just a bug and not required
+>
+> _\*a few minutes later\*_
+> 
+> **me:** *sad noises*
+> 
+> **me:**
+> ```rust
+> ...
+> let check_status = if merge {
+>     let check_status = Command::new(&cargo).arg("clean").status()?;
+>     ...
+> ```
+
+<!--- Stupid trick to fix my editor's syntax highlighting for my sanity ` -->
+
+Makes sense that `cargo` can't find the build fingerprints when the whole target
+directory gets wiped :/
+
+Now to get a sense of why this happens, we first need to talk about something
+we've been neglecting for a while. What does `cargo sqlx prepare` even do? Take
+these :pick::flashlight:, we're going digging
+
+From an end user's perspective `cargo sqlx prepare` is pretty simple. You do
+something like
+
+{{< raw >}}
+<pre tabindex="0"><code><b><span class="term-green">$</span></b> <span class="term-red">DATABASE_URL</span>=<span class="term-yellow"><i>'{db_url}'</i></span> <span class="term-green">cargo</span> sqlx prepare
+</code></pre>
+{{< /raw >}}
+
+and it creates an `sqlx-data.json` file to describe your queries. Tack on the
+`--merged` flag and it can prepare queries for a whole workspace instead. Can't
+really get much simpler than that
+
+Under the hood the process is conceptually pretty simple too. From a high level
+both of these commands do the same thing. It's roughly as follows
+
+1. Setup some trick to get `cargo` to recompile all the query macros
+2. Compile the crate(s) with a flag to indicate that each query macro should:
+    1. Get query info from the database
+    2. Type-check the query with all the Rust types
+    3. Store the individual query's info in the target directory
+3. Gather every query's info and save it in `sqlx-data.json`
+
+The reason we need step 1 is due to `sqlx`'s
+macros being [impure](https://en.wikipedia.org/wiki/Pure_function). `cargo`
+expects proc-macros to be pure (within what it can track), so it can do things
+like
+reuse build artifacts to speed up incremental compilations.
+`cargo sqlx prepare` on the other hand
+expects all query macros to be rebuilt, so that each one can connect to the
+database and spit out its query
+info for collection. It doesn't keep old query info around as a means of garbage
+collection and to ensure that the macros are all run against the current database.
+These two goals are at odds with each other, so, to compensate, `cargo sqlx prepare`
+resorts to trickery to have `cargo` rebuild all the query macros.
+Remember how I mentioned proc-macro (ab)use before?
+
+All of that aside here's what step 1 and 2 look like from `cargo-sqlx`'s perspective (the
+sub-steps of step 2 happen within each query macro)
+
+```rust {hl_lines=[2,"28-34"]}
+let check_status = if merge { // vv Working on the whole workspace vv
+    let clean_status = Command::new(&cargo).arg("clean").status()?;
+
+    if !clean_status.success() {
+        bail!("`cargo clean` failed with status: {}", clean_status);
+    }
+
+    let mut rustflags = env::var("RUSTFLAGS").unwrap_or_default();
+    rustflags.push_str(&format!(
+        " --cfg __sqlx_recompile_trigger=\"{}\"",
+        SystemTime::UNIX_EPOCH.elapsed()?.as_millis()
+    ));
+
+    Command::new(&cargo)
+        .arg("check")
+        .args(cargo_args)
+        .env("RUSTFLAGS", rustflags)
+        .env("SQLX_OFFLINE", "false")
+        .env("DATABASE_URL", url)
+        .status()?
+} else { // vv Working on a single crate vv
+    Command::new(&cargo)
+        .arg("rustc")
+        .args(cargo_args)
+        .arg("--")
+        .arg("--emit")
+        .arg("dep-info,metadata")
+        // set an always-changing cfg so we can consistently trigger a
+        // recompile
+        .arg("--cfg")
+        .arg(format!(
+            "__sqlx_recompile_trigger=\"{}\"",
+            SystemTime::UNIX_EPOCH.elapsed()?.as_millis()
+        ))
+        .env("SQLX_OFFLINE", "false")
+        .env("DATABASE_URL", url)
+        .status()?
+};
+```
+
+Demystifying some things you can see that `sqlx` passes in `SQLX_OFFLINE=false`
+along with the `DATABASE_URL` to signal to the query macros that they should
+check the queries against the database and save the info to a file.
+
+The part that we're here for though are those highlighted blocks. That's where
+the setup is done to trigger a recompile (ignore the `RUSTFLAGS` bit in the
+if-block. It's a red herring). You can see that when
+`--merged` is used a full `cargo clean` is done to setup the recompile and `cargo check` is used
+to compile the workspace. Without `--merged` you can apparently get by with an
+"always-changing cfg" to trigger a recompile per the comment and `cargo rustc` is used instead. Luckily we can
+glean some insight from
+[the PR that added `--merged`](https://github.com/launchbadge/sqlx/pull/506
+"Support workspaces for offline feature").
+
+> This patch enables having a top-level `sqlx-data.json` file within a workspace.
+>
+> **It does this by using a full clean / check instead of `cargo rustc` which
+> fails on a workspace.**
+>
+> ...
+
+Mystery solved. Having a full history of changes really makes things too easy.
+
+Well that explains why we have normal compile times for
+`prepare`ing a single crate, but have to deal with a full rebuild when
+it's a workspace. Now my problem is that I _don't want_ a full rebuild.
+
+At the very least the scope of the problem is reasonably well defined:
+
+**Find some way to trigger recompiles in a workspace without resorting to a full
+`cargo clean`.**
+
+Saying that I went through _a lot_ of iterations while working this out would be
+an understatement. Ideally the solution would be totally hands-free without
+requiring the user to have to take an action or provide any information. There
+are a lot of ways you can trigger a recompile of different crates. There's
+`cargo clean --package [<SPEC>]`, but that's suboptimal since it still has to
+compile the whole crate. Updating a file's modified time in a crate within the
+workspace can trigger a recompile which is certainly better, but how do we
+figure out which crates use `sqlx`? I was ~~rubber duck debugging~~ _chatting
+with my coworker_ when they mentioned "I wonder if you can just walk the dep
+graph to get all the crates that depend on `sqlx`?"
+
+_Why didn't I think of that?_
+
+It all seems so obvious in hindsight, but you really can't complain when the
+duck comes up with the answer for you. So can just walk the crate graph to
+figure it out? **Hell yeah you can!** `cargo metadata` spits out tons of
+information about the current project and there's even the
+[`cargo_metadata`](https://docs.rs/cargo_metadata/latest/cargo_metadata/) crate
+that wraps all of this information up into a nice neat interface for you.
+
+This ends up being reasonably straightforward:
+
+1. Build the reverse dependency graph (aka mapping dependencies to their
+   dependents)
+2. Find any `sqlx-macros` packages
+3. Get all list of all their dependents
+4. `cargo clean --package` all the crates outside the workspace and update the
+   mtime of any crates within the workspace
+
+That's all there is to it! After performing all of that `cargo` should recompile
+all of the crates that depend on `sqlx-macros` which run all the
+[impure](https://en.wikipedia.org/wiki/Pure_function) macros, so that they can
+get fresh information from the database.
+
+Here's all of that in code (Skipping `Metadata`'s implementation to keep things reasonably
+digestible)
+
+```rust
+/// Sets up recompiling only crates that depend on `sqlx-macros`
+///
+/// This gets a listing of all crates that depend on `sqlx-macros` (direct and
+/// transitive). The  crates within the current workspace have their source
+/// file's mtimes updated while crates outside the workspace are selectively
+/// `cargo clean -p`ed. In this way we can trigger a recompile of crates that
+/// may be using compile-time macros without forcing a full recompile
+fn setup_minimal_project_recompile(
+    cargo: &str,  // The cargo executable path provided by the `CARGO` env var
+    metadata: &Metadata
+) -> anyhow::Result<()> {
+    let ProjectRecompileAction {
+        clean_packages,
+        touch_paths,
+    } = minimal_project_recompile_action(metadata)?;
+
+    for file in touch_paths {
+        let now = filetime::FileTime::now();
+        filetime::set_file_times(&file, now, now)
+            .with_context(|| format!("Failed to update mtime for {:?}", file))?;
+    }
+
+    for pkg_id in &clean_packages {
+        let clean_status = Command::new(cargo)
+            .args(&["clean", "-p", pkg_id])
+            .status()?;
+
+        if !clean_status.success() {
+            bail!("`cargo clean -p {}` failed", pkg_id);
+        }
+    }
+
+    Ok(())
+}
+
+fn minimal_project_recompile_action(
+    metadata: &Metadata
+) -> anyhow::Result<ProjectRecompileAction> {
+    // Get all the packages that depend on `sqlx-macros`
+    let mut sqlx_macros_dependents = BTreeSet::new();
+    let sqlx_macros_ids: BTreeSet<_> = metadata
+        .entries()
+        // We match just by name instead of name and url because some people may
+        // have it installed through different means like vendoring
+        .filter(|(_, package)| package.name() == "sqlx-macros")
+        .map(|(id, _)| id)
+        .collect();
+    for sqlx_macros_id in sqlx_macros_ids {
+        sqlx_macros_dependents.extend(
+            metadata.all_dependents_of(sqlx_macros_id)
+        );
+    }
+
+    // Figure out which `sqlx-macros` dependents are in the workspace vs out
+    let mut in_workspace_dependents = Vec::new();
+    let mut out_of_workspace_dependents = Vec::new();
+    for dependent in sqlx_macros_dependents {
+        if metadata.workspace_members().contains(&dependent) {
+            in_workspace_dependents.push(dependent);
+        } else {
+            out_of_workspace_dependents.push(dependent);
+        }
+    }
+
+    // In-workspace dependents have their source file's mtime updated.
+    // Out-of-workspace get `cargo clean -p <PKGID>`ed
+    let files_to_touch: Vec<_> = in_workspace_dependents
+        .iter()
+        .filter_map(|id| {
+            metadata
+                .package(id)
+                .map(|package| package.src_paths().to_owned())
+        })
+        .flatten()
+        .collect();
+    let packages_to_clean: Vec<_> = out_of_workspace_dependents
+        .iter()
+        .filter_map(|id| {
+            metadata
+                .package(id)
+                .map(|package| package.name().to_owned())
+        })
+        .collect();
+
+    Ok(ProjectRecompileAction {
+        clean_packages: packages_to_clean,
+        touch_paths: files_to_touch,
+    })
+}
+```
+
+That's all there is to it! Swap out the `cargo clean` for a call to
+{{< hl_inline rust >}}setup_minimal_project_recompile(){{< /hl_inline >}} and
+now `cargo sqlx prepare --merged` only compiles all of the crates that depend on
+`sqlx-macros` _\*cue the fanfare\*_
+
+_PR: [launchbadge/sqlx#1684](https://github.com/launchbadge/sqlx/pull/1802
+"Try avoiding a full clean in `cargo sqlx prepare --merged`")_
+
+It seems a bit silly to add benchmarks for this since it's really just
+benchmarking my computer and nothing more, but this magical incantation
+
+{{< raw >}}
+<pre tabindex="0"><code><b><span class="term-green">$</span></b> <span class="term-green">cargo</span> tree --no-dedupe --prefix none | <span class="term-green">sort</span> --unique | <span class="term-green">wc</span> --lines
+</code></pre>
+{{< /raw >}}
+
+shows that a crate that only depends on `sqlx` with the `"runtime-tokio-tls"`
+and `"sqlite"` features has 100 crates in it's dep tree. It's no
+surprise that avoiding compiling almost all of those will shave off a
+lot of time. This would get amplified by any other dependencies you add too. Adding
+`axum` bumps that number up from 100 to 127 which `cargo clean` would happily wipe away.
+
+Also it's pretty clear that this whole _tricking cargo to recompile things_ is a
+huge hack. If you have ideas for more formal ways to express that a recompile
+should happen feel free to bother me! We could even theorize on ways to make
+sqlx pure :smiling_imp:.
+
+# Conclusion
+
+Now I'm sure something that is on at least some of your all's minds is, "when
+will all of this be released?!" The answer is that it already has been... for
+like 6 months! It turns out that I'm _really_ slow at writing blog posts.
+Hopefully later ones will go by much faster now that I have a lot of
+non-recurring engineering work done.
+
+Big thanks to:
+
+- LaunchBadge for open-sourcing `sqlx`, so that I can submit my hot trash for
+  them to maintain :relieved:
+- Rust for giving me enough compile-time guarantees that I don't want to cry
+  when hacking on a new codebase
+- Rust tooling for being **insanely** good at times
+- My previous coworker for always finding things that I manage to miss
+
+It's been a long read, thanks for hanging in there. You should probably go for a
+walk or hydrate or something.

@@ -1,0 +1,544 @@
+::selection,
+::-moz-selection {
+  color: var(--color-bg);
+  background-color: var(--color-primary);
+}
+
+* {
+  --term-red:     var(--rose-love);
+  --term-green:   var(--rose-foam);
+  --term-yellow:  var(--rose-gold);
+  --term-blue:    var(--rose-pine);
+  --term-magenta: var(--rose-iris);
+  --term-cyan:    var(--rose-rose);
+  --term-gray:    var(--rose-muted);
+  --inner-mono:   #fff;
+}
+
+blockquote#inner-mono {
+  color: var(--term-red);
+  border-left-color: var(--term-red);
+  opacity: 0.8;
+}
+
+// Custom classes that I can use in raw HTML
+.term-red {
+  color: var(--term-red);
+}
+.term-green {
+  color: var(--term-green);
+}
+.term-yellow {
+  color: var(--term-yellow);
+}
+.term-blue {
+  color: var(--term-blue);
+}
+.term-magenta {
+  color: var(--term-magenta);
+}
+.term-cyan {
+  color: var(--term-cyan);
+}
+.term-gray {
+  color: var(--term-gray);
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-font);
+
+  @include link-1();
+}
+
+.post-summary,
+.post-meta {
+  @include link-2();
+}
+
+.pag-current a,
+.pag-current a:hover {
+  color: var(--color-focus);
+}
+
+.title-sub,
+.post-meta {
+  color: var(--color-mute);
+}
+
+header,
+.page-info {
+  border-bottom: $divider;
+  color: var(--rose-text);
+}
+
+.post + .post,
+.pagination,
+footer {
+  border-top: $divider;
+}
+
+.post-meta-archive {
+  @include link-2();
+
+  color: var(--color-mute);
+}
+
+@media screen and (max-width: $width-md) {
+  .sidebar {
+    border-top: $divider;
+  }
+}
+
+// single page part
+.post-content {
+  @include link-2();
+}
+
+.markdown-body {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  code {
+    color: var(--rose-text);
+  }
+
+  a code {
+    color: var(--color-primary);
+  }
+
+  a:hover code {
+    color: var(--color-secondary);
+  }
+
+  h1,
+  h2 {
+    border-bottom: $divider;
+  }
+
+  blockquote {
+    color: var(--color-mute);
+  }
+
+  blockquote code {
+    color: var(--rose-muted);
+  }
+
+  img {
+    border-radius: 2px;
+    background-color: inherit; // fix white pixels under border-radius
+  }
+
+  hr {
+    height: 2px;
+  }
+
+  pre,
+  code {
+    background-color: var(--color-codebg);
+  }
+}
+
+.post-loading {
+  border-top: $divider;
+}
+
+.post-comment {
+  border-top: $divider;
+
+  span.post-comment-notloaded {
+    padding: 1.5rem 0;
+    color: var(--color-secondary);
+    cursor: pointer;
+
+    &:hover {
+      color: var(--color-focus);
+    }
+  }
+}
+
+// components
+.btn {
+  div {
+    background-color: var(--color-divider);
+
+    color: var(--color-primary);
+  }
+
+  div:hover {
+    background-color: var(--color-primary);
+    color: var(--color-divider);
+  }
+
+  div + div {
+    border-top: 2px solid var(--color-bg);
+  }
+}
+
+// prism.js theme [solarized-light]
+
+code[class*='language-'],
+pre[class*='language-'] {
+  -moz-tab-size: 4;
+  -o-tab-size: 4;
+  tab-size: 4;
+}
+
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  color: #93a1a1; /* base1 */
+}
+
+.token.punctuation {
+  color: #586e75; /* base01 */
+}
+
+.token.namespace {
+  opacity: 0.7;
+}
+
+.token.property,
+.token.tag,
+.token.boolean,
+.token.number,
+.token.constant,
+.token.symbol,
+.token.deleted {
+  color: #268bd2; /* blue */
+}
+
+.token.selector,
+.token.attr-name,
+.token.string,
+.token.char,
+.token.builtin,
+.token.url,
+.token.inserted {
+  color: #2aa198; /* cyan */
+}
+
+.token.entity {
+  color: #657b83; /* base00 */
+  background: #eee8d5; /* base2 */
+}
+
+.token.atrule,
+.token.attr-value,
+.token.keyword {
+  color: #859900; /* green */
+}
+
+.token.function,
+.token.class-name {
+  color: #b58900; /* yellow */
+}
+
+.token.regex,
+.token.important,
+.token.variable {
+  color: #cb4b16; /* orange */
+}
+
+.token.important,
+.token.bold {
+  font-weight: 600;
+}
+.token.italic {
+  font-style: italic;
+}
+
+// fix conflicts of primer css & prism.js style
+pre,
+code {
+  .rule {
+    margin: 0;
+    border-bottom: none;
+    overflow: inherit;
+
+    &::before,
+    &::after {
+      display: inherit;
+      clear: inherit;
+    }
+  }
+}
+
+// disqus js styles
+
+#dsqjs {
+  a {
+    text-decoration: none !important;
+    color: var(--color-secondary) !important;
+  }
+
+  a:hover {
+    color: var(--color-focus) !important;
+  }
+
+  .dsqjs-bullet::after {
+    color: var(--color-mute) !important;
+    font-weight: 600 !important;
+  }
+
+  .dsqjs-no-comment {
+    color: var(--color-font) !important;
+  }
+
+  .dsqjs-nav-tab {
+    color: var(--color-mute) !important;
+  }
+
+  .dsqjs-tab-active {
+    color: var(--color-font) !important;
+
+    & > span:after {
+      background-color: var(--color-secondary) !important;
+    }
+  }
+
+  .dsqjs-post-list {
+    .dsqjs-post-avatar {
+      background: var(--color-bg) !important;
+    }
+
+    .dsqjs-post-header {
+      .dsqjs-post-author {
+        color: var(--color-mute) !important;
+        font-weight: 600;
+      }
+
+      .dsqjs-admin-badge {
+        color: var(--color-font) !important;
+        background: var(--color-codebg) !important;
+      }
+
+      .dsqjs-meta {
+        color: var(--color-mute) !important;
+      }
+    }
+  }
+
+  .dsqjs-post-body {
+    color: var(--color-font) !important;
+
+    code,
+    pre {
+      background: var(--color-codebg) !important;
+    }
+
+    blockquote {
+      color: var(--color-codebg) !important;
+      border-left: 0.25em solid var(--color-divider) !important;
+    }
+  }
+
+  .dsqjs-load-more {
+    background: var(--color-mute) !important;
+    color: var(--color-bg) !important;
+  }
+
+  footer {
+    border-top: 2px solid var(--color-divider) !important;
+    font-weight: 600 !important;
+    color: var(--color-mute) !important;
+  }
+
+  .dsqjs-order-radio:checked + .dsqjs-order-label {
+    color: var(--color-font) !important;
+    background-color: var(--color-divider) !important;
+  }
+
+  .dsqjs-order-label {
+    background-color: var(--color-bg) !important;
+  }
+
+  p.dsqjs-has-more a.dsqjs-has-more-btn {
+    color: var(--color-mute) !important;
+  }
+}
+
+.search-result-info {
+  border-bottom: $divider;
+}
+
+.search-input {
+  border-top: 2px solid;
+  border-left: 2px solid;
+  border-bottom: 2px solid;
+  border-right: none;
+  border-radius: 0.25rem;
+  border-color: var(--color-divider);
+  background-color: var(--color-bg);
+
+  &:hover,
+  &:focus-within {
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+  }
+
+  input {
+    outline: none;
+    border: none;
+    color: inherit;
+    background-color: inherit;
+  }
+
+  button {
+    outline: none;
+    border-top: 2px solid;
+    border-left: none;
+    border-right: 2px solid;
+    border-bottom: 2px solid;
+    border-radius: 0 0.25rem 0.25rem 0;
+    border-color: inherit;
+    color: inherit;
+    background-color: inherit;
+
+    &:hover {
+      color: var(--color-secondary);
+    }
+  }
+}
+
+// Custom syntax highlighting
+.chroma {
+  color: #f8f8f2;
+  background-color: var(--color-codebg) !important;
+
+  /* Comment */.c,
+  /* CommentMultiline */ .cm,
+  /* CommentSingle */ .c1,
+  /* GenericStrong */ .gs,
+  {
+    color: var(--term-gray);
+  }
+
+  /* LiteralStringDoc aka doc comment (silly python) */ .sd,
+  {
+    color: var(--term-gray);
+    font-weight: bold;
+  }
+
+  /* LiteralStringInterpol */ .si,
+  /* Keyword */ .k,
+  /* KeywordDeclaration aka `let` */ .kd,
+  {
+    color: var(--term-magenta)
+  }
+
+  /* OperatorWord */ .ow,
+  /* KeywordPseudo aka & */ .kp,
+  /* LiteralString */ .s,
+  /* LiteralNumber */ .m,
+  /* LiteralNumberBin */ .mb,
+  /* LiteralNumberFloat */ .mf,
+  /* LiteralNumberHex */ .mh,
+  /* LiteralNumberInteger */ .mi,
+  /* LiteralNumberIntegerLong */ .il,
+  /* LiteralNumberOct */ .mo,
+  /* NameAttribute aka lifetimes */ .na,
+  {
+    color: var(--term-yellow)
+  }
+
+  /* Name aka waaaay too many things */ .n,
+  /* NameBuiltin aka Some variant names and types */ .nb,
+  {
+    color: var(--rose-text);
+  }
+
+  /* LiteralStringEscape */ .se,
+  /* GenericSubheading */ .gu,
+  /* NameFunctionMagic aka macro calls */ .fm,
+  /* NameFunction aka function ident definition */ .nf,
+  /* CommentPreproc aka derive */ .cp,
+  {
+    color: var(--term-blue);
+  }
+
+  /* NameConstant */ .no,
+  /* Operator */ .o,
+  /* KeywordConstant aka false or true */ .kc,
+  /* GenericDeleted */ .gd,
+  {
+    color: var(--term-red);
+  }
+
+  /* NameBuiltinPseudo aka self and Self */ .bp,
+  /* Codeline aka some punctuation */ .cl,
+  /* Punctuation aka matching (), [], <>, and ... */ .p,
+  {
+    color: var(--term-cyan);
+  }
+
+  /* NameOther aka TOML things */ .nx,
+  /* NameClass aka some types/functions/modules, but not all */ .nc,
+  /* NameProperty TODO: using this as methods for now */ .py,
+  /* KeywordType aka primitives */ .kt,
+  /* GenericInserted */ .gi,
+  {
+    color: var(--term-green);
+  }
+
+  /* Line */ .line { display: flex }
+  /* LineLink */ .lnlinks { outline: none; text-decoration: none; color: inherit }
+  /* LineTableTD */ .lntd { vertical-align: top; padding: 0; margin: 0; border: 0 }
+  /* LineTable */ .lntable { border-spacing: 0; padding: 0; margin: 0; border: 0 }
+  // TODO: This is the overlay color. Expose it as a var
+  /* LineHighlight */ .hl { background-color: var(--rose-highlight-medium) }
+
+  /* Error */ .err { color: #f0f }
+
+
+  // Things I haven't used yet
+  /* CommentHashband */.ch,
+  /* CommentPreprocessorFile */ .cpf,
+  /* CommentSpecial */ .cs,
+  /* KeywordNamespace */ .kn,
+  /* KeywordReserved */ .kr,
+  /* NameDecorator */ .nd,
+  /* NameEntity */ .ni,
+  /* NameException */ .ne,
+  /* NameLabel */ .nl,
+  /* NameNamespace */ .nn,
+  /* NameTag */ .nt,
+  /* NameVariable */ .nv,
+  /* NameVariableClass */ .vc,
+  /* NameVariableGlobal */ .vg,
+  /* NameVariableInstance */ .vi,
+  /* NameVariableMagic */ .vm,
+  /* Literal */ .l,
+  /* LiteralDate */ .ld,
+  /* LiteralStringAffix */ .sa,
+  /* LiteralStringBacktick */ .sb,
+  /* LiteralStringChar */ .sc,
+  /* LiteralStringDelimiter */ .dl,
+  /* LiteralStringDouble */ .s2,
+  /* LiteralStringHeredoc */ .sh,
+  /* LiteralStringOther */ .sx,
+  /* LiteralStringRegex */ .sr,
+  /* LiteralStringSingle */ .s1,
+  /* LiteralStringSymbol */ .ss,
+  /* Generic */ .g,
+  /* GenericEmph */ .ge,
+  /* GenericError */ .gr,
+  /* GenericHeading */ .gh,
+  /* GenericOutput */ .go,
+  /* GenericPrompt */ .gp,
+  /* GenericTraceback */ .gt,
+  /* GenericUnderline */ .gl,
+  /* TextWhitespace */ .w
+  {
+    color: #f0f;
+  }
+
+
+  /* Other */ .x { color: #f0f; background-color: #f0f }
+  /* LineNumbersTable */ .lnt { white-space: pre; user-select: none; margin-right: 0.4em; padding: 0 0.4em 0 0.4em;color: #f0f }
+  /* LineNumbers */ .ln { white-space: pre; user-select: none; margin-right: 0.4em; padding: 0 0.4em 0 0.4em; color: #f0f }
+}

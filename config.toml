@@ -9,14 +9,15 @@ enableRobotsTXT = true
 [params]
 showReadTime = true
 author = 'Cosmic Horror'
-sourceURL = 'https://github.com/LovecraftianHorror/cosmichorror'
+sourceURL = 'https://github.com/CosmicHorrorDev/cosmichorror'
 
 [markup]
 
 [markup.highlight]
 # Gets rid of the ugly background color for code blocks. What else it does? No
 # clue...
-codeFences = false
+#codeFences = false
+noclasses = false
 
 [markup.tableOfContents]
 # Why yes I'm not a designer. Why do you ask?
@@ -37,14 +38,19 @@ weight = 2
 
 [[menu.link]]
 name = "GitHub"
-url = "https://github.com/LovecraftianHorror"
+url = "https://github.com/CosmicHorrorDev"
 weight = 1
+
+[[menu.link]]
+name = "Mastodon"
+url = "https://fosstodon.org/@CosmicHorror"
+weight = 2
 
 [deployment]
 
 [[deployment.targets]]
 name = "cosmichorror-deploy"
-URL = "gs://cosmichorror.dev"
+URL = "gs://cosmichorror.dev/"
 
 [[deployment.matchers]]
 # Cache static assets for 1 year.

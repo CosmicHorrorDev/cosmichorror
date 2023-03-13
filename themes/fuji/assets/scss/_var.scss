@@ -1,0 +1,93 @@
+$font-size-0: 2rem !default; // 16px->32px
+$font-size-1: 1.75rem !default; // 16px->28px #
+$font-size-2: 1.5rem !default; // 16px->24px ##
+$font-size-3: 1.25rem !default; // 16px->20px ###
+$font-size-4: 1rem !default; // 16px->16px ####
+
+// used primer variables
+// @primer/css/support/variables/misc.scss
+$font-weight-bold: 600;
+$font-weight-semibold: 600;
+$font-weight-normal: 400;
+$font-weight-light: 400;
+$body-font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'Arial', 'Helvetica Neue',
+  'Helvetica', 'PingFang SC', 'Hiragino Sans GB', 'Source Han Sans CN', 'Source Han Sans SC',
+  'Microsoft YaHei', 'WenQuanYi Micro Hei', sans-serif !default;
+$mono-font: 'SF Mono', 'Fira Code', 'Consolas', -apple-system, BlinkMacSystemFont, 'SF Pro Text',
+  'Segoe UI', 'Arial', 'Helvetica Neue', 'Helvetica', 'PingFang SC', 'Hiragino Sans GB',
+  'Source Han Sans CN', 'Source Han Sans SC', 'Microsoft YaHei', 'WenQuanYi Micro Hei', monospace !default;
+$title-font: 'Product Sans', sans-serif !default;
+$body-font-size: 16px !default;
+
+$width-md: 768px;
+
+// <3 Rosé Pine Dawn <3
+$light-base: #faf3eb;
+$light-overlay: #f2e9e1;
+$light-highlight-low: #f4ede8;
+$light-highlight-medium: #dfdad9;
+$light-highlight-high: #cecacd;
+$light-muted: #9893a5;
+$light-subtle: #797593;
+$light-text: #575279;
+$light-love: #b4637a;
+$light-foam: #56949f;
+$light-gold: #ea9d34;
+$light-pine: #286983;
+$light-iris: #907aa9;
+$light-rose: #d7827e;
+// TODO:
+$light-muted-gold: #b68147;
+
+// <3 Rosé Pine Moon <3
+$dark-base: #1a1825;
+$dark-overlay: #393552;
+$dark-highlight-low: #2a283e;
+$dark-highlight-medium: #44415a;
+$dark-highlight-high: #524f67;
+$dark-muted: #6e6a86;
+$dark-subtle: #908caa;
+$dark-text: #deddf4;
+$dark-love: #eb6f92;
+$dark-foam: #9ccfd8;
+$dark-gold: #f6c177;
+$dark-pine: #3e8fb0;
+$dark-iris: #c4a7e7;
+$dark-rose: #ea9a97;
+// Toned down gold for dark-theme links
+$dark-muted-gold: #b68147;
+
+$light-color-primary: #{$light-pine} !default;
+$light-color-secondary: #{$light-foam} !default;
+// TODO: what is this used for?
+$light-color-focus: #f0f !default;
+$light-color-mute: #{$light-muted} !default;
+$light-color-font: #{$light-subtle} !default;
+$light-color-divider: #{$light-highlight-high} !default;
+$light-color-bg: #{$light-base} !default;
+$light-color-codebg: #{$light-highlight-low} !default;
+
+$dark-color-primary: #{$dark-muted-gold} !default;
+$dark-color-secondary: #{$dark-rose} !default;
+// TODO: what is this used for?
+$dark-color-focus: #f0f !default;
+$dark-color-mute: #{$dark-muted} !default;
+$dark-color-font: #{$dark-subtle} !default;
+$dark-color-divider: #{$dark-highlight-high} !default;
+$dark-color-bg: #{$dark-base} !default;
+$dark-color-codebg: #{$dark-highlight-low} !default;
+
+@font-face {
+  font-family: 'Product Sans';
+  font-style: normal;
+  // font-display: swap;
+  font-weight: 700;
+  src: url('https://cdn.jsdelivr.net/gh/dsrkafuu/dsr-cdn-main@1/fonts/product_sans/product_sans_700.woff2')
+    format('woff2');
+}
+
+// @import url('https://fonts.googleapis.com/css2?family=Fira+Code&display=swap');
+
+@font-face {
+  font-family: 'Fira Code', monospace;
+}

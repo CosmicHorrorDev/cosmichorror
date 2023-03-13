@@ -53,14 +53,14 @@ name = "cosmichorror-deploy"
 URL = "gs://cosmichorror.dev/"
 
 [[deployment.matchers]]
-# Cache static assets for 1 year.
+# Cache static assets for 1 hour.
 pattern = "^.+\\.(js|css|svg|ttf)$"
-cacheControl = "max-age=31536000, no-transform, public"
+cacheControl = "max-age=3600, no-transform, public"
 gzip = true
 
 [[deployment.matchers]]
 pattern = "^.+\\.(png|jpg)$"
-cacheControl = "max-age=31536000, no-transform, public"
+cacheControl = "max-age=3600, no-transform, public"
 gzip = false
 
 [[deployment.matchers]]

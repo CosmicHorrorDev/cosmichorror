@@ -1,6 +1,6 @@
 +++
 draft = false
-tags = ["rust", "oss", "deep-dive", "sqlx"]
+tags = ["rust", "oss", "sqlx"]
 title = "SQLx Compile Time Woes"
 date = "2023-03-13T00:00:00-00:00"
 description = "A curious case of climbing compile-times"

@@ -22,8 +22,8 @@
 {{ else }}
 <title>{{ .Title }} - {{ .Site.Title }}</title>
 {{ end }}
-{{ if or (.Params.author) (.Site.Params.author) }}
-<meta name="author" content="{{ if .Params.author }}{{ .Params.author }}{{ else }}{{ .Site.Params.author }}{{ end }}" />
+{{ if or (.Params.author.name) (.Site.Params.author.name) }}
+<meta name="author" content="{{ if .Params.author.name }}{{ .Params.author.name }}{{ else }}{{ .Site.Params.author.name }}{{ end }}" />
 {{ end }}
 {{ if or (.Params.description) (.Site.Params.description) }}
 <meta name="description" content="{{ if .Params.description }}{{ .Params.description }}{{ else }}{{ .Site.Params.description }}{{ end }}" />

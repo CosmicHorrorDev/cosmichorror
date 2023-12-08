@@ -8,8 +8,11 @@ enableRobotsTXT = true
 
 [params]
 showReadTime = true
-author = 'Cosmic Horror'
 sourceURL = 'https://github.com/CosmicHorrorDev/cosmichorror'
+
+[params.author]
+name = 'Cosmic Horror'
+email = 'CosmicHorrorDev@pm.me'
 
 [markup]
 

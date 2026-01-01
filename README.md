@@ -1,3 +1,10 @@
+> [!IMPORTANT]
+> Moved to codeberg :)
+>
+> <https://codeberg.org/CosmicHarper/blog>
+
+---
+
 # _cosmichorror_
 
 Home to my personal blog :)
